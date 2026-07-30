@@ -53,23 +53,28 @@ class PinError(Exception):
     `except Exception` fail-open guard."""
 
 
-def _detect_repo_root() -> Path:
-    """Best-effort project-root detection: walk up from this file looking for a `.git` directory,
-    falling back to this file's own directory if none is found. Robust to however deep this file
-    happens to be vendored inside the project it protects (e.g. `My Projects/Alzheimer/pins.py`
-    two levels under a workspace root, or a future standalone clone's own top level) -- unlike a
-    hardcoded `.parents[N]`, which silently breaks the moment the nesting depth changes.
+def _detect_repo_root(start: "str | Path | None" = None) -> Path:
+    """Project-root detection: walk up from `start` looking for a `.git` directory, falling back
+    to `start` itself if none is found.
 
-    Not the FULL fix for a truly standalone install (cloned once, pointed at many different target
-    projects): that needs REPO_ROOT resolved per-call from the invoking session's actual cwd
-    (available on every hook payload as `cwd`), not once at import time from this file's own
-    install location. Tracked as an open item, not solved here -- see the project README's Status
-    section."""
-    here = Path(__file__).resolve().parent
-    for candidate in (here, *here.parents):
+    `start` defaults to the CURRENT WORKING DIRECTORY, not this file's own location -- that is
+    the actual portability fix (2026-07-30). A tool vendored inside the project it protects and a
+    tool cloned standalone and pointed at an unrelated project both work correctly as long as the
+    caller is invoked FROM (CLI) or reports (`cwd` in a hook payload) the target project's
+    directory, which is the normal case: a Bash tool call's subprocess cwd is the project
+    directory, and every Claude Code hook payload carries its own `cwd` field for exactly this
+    reason (see hooks/pin_deliver.py and hooks/pin_precompact.py, which pass it through
+    explicitly rather than trusting inherited process cwd, which is not guaranteed to match).
+
+    Module-level REPO_ROOT (below) is computed once at import time from cwd, which is correct for
+    every CLI invocation. Hook invocations must NOT rely on that default -- they call this
+    function again with the payload's own `cwd` and pass the result through explicitly to
+    everything downstream (`repo_root=` parameters throughout this module)."""
+    origin = Path(start).resolve() if start else Path.cwd()
+    for candidate in (origin, *origin.parents):
         if (candidate / ".git").exists():
             return candidate
-    return here
+    return origin
 
 
 REPO_ROOT = _detect_repo_root()
@@ -322,10 +327,15 @@ def _is_secret_shaped_path(raw: str) -> bool:
     return any(fnmatch.fnmatch(c, pat) for c in candidates for pat in _SECRET_PATH_PATTERNS)
 
 
-def _check_path_relative(raw: str) -> Path:
+def _check_path_relative(raw: str, repo_root: "Path | None" = None) -> Path:
     """A check's `path` is always repo-relative, contained, not secret-shaped, and -- checked as
     late as possible, immediately before the caller reads it -- not a symlink at any component of
     the literal (unresolved) path the caller is about to open.
+
+    `repo_root` defaults to the module-level REPO_ROOT (correct for CLI use) but every caller in
+    the hook path passes it explicitly, resolved from that invocation's actual `cwd` -- see
+    _detect_repo_root()'s docstring. This is the parameter that makes checks resolve against the
+    INVOKING session's project, not wherever pins.py itself happens to be installed.
 
     Note the symlink walk is over the UNRESOLVED path, not `resolved` (which is `.resolve()`'d and
     therefore has already had any symlink components collapsed away by construction -- checking
@@ -338,18 +348,19 @@ def _check_path_relative(raw: str) -> Path:
     See module docstring and DESIGN.md section 8 (M1: this narrows the race to "between this
     check and the caller's next line", it does not eliminate it; a full fix needs an OS-level
     O_NOFOLLOW open, not available uniformly on Windows, this workspace's primary platform)."""
+    root = repo_root if repo_root is not None else REPO_ROOT
     if not raw or len(raw) > MAX_CHECK_FIELD_LEN or Path(raw).is_absolute():
         raise PinError("check path must be a short, repo-relative path, not absolute")
     if _is_secret_shaped_path(raw):
         raise PinError(f"refusing a check against a secret-shaped path: {raw!r}")
-    resolved = _contained(REPO_ROOT / raw, REPO_ROOT)
-    literal = REPO_ROOT / raw
+    resolved = _contained(root / raw, root)
+    literal = root / raw
     node = literal
-    root = REPO_ROOT.resolve()
+    root_resolved = root.resolve()
     while True:
         if node.is_symlink():
             raise PinError(f"refusing a check through a symlink: {raw!r}")
-        if node.resolve() == root or node.parent == node:
+        if node.resolve() == root_resolved or node.parent == node:
             break
         node = node.parent
     return resolved
@@ -364,16 +375,16 @@ def _check_file_size_ok(path: Path) -> bool:
         return False
 
 
-def _check_path_exists(spec: dict) -> bool:
-    return _check_path_relative(spec.get("path", "")).exists()
+def _check_path_exists(spec: dict, repo_root: "Path | None" = None) -> bool:
+    return _check_path_relative(spec.get("path", ""), repo_root).exists()
 
 
-def _check_path_absent(spec: dict) -> bool:
-    return not _check_path_relative(spec.get("path", "")).exists()
+def _check_path_absent(spec: dict, repo_root: "Path | None" = None) -> bool:
+    return not _check_path_relative(spec.get("path", ""), repo_root).exists()
 
 
-def _check_text_in_file(spec: dict) -> bool:
-    path = _check_path_relative(spec.get("path", ""))
+def _check_text_in_file(spec: dict, repo_root: "Path | None" = None) -> bool:
+    path = _check_path_relative(spec.get("path", ""), repo_root)
     text = spec.get("text", "")
     if not text:
         raise PinError("text_in_file check requires non-empty 'text'")
@@ -387,8 +398,8 @@ def _check_text_in_file(spec: dict) -> bool:
         return False
 
 
-def _check_file_sha256(spec: dict) -> bool:
-    path = _check_path_relative(spec.get("path", ""))
+def _check_file_sha256(spec: dict, repo_root: "Path | None" = None) -> bool:
+    path = _check_path_relative(spec.get("path", ""), repo_root)
     expect = (spec.get("sha256") or "").lower()
     if not re.fullmatch(r"[0-9a-f]{64}", expect):
         raise PinError("file_sha256 'sha256' must be exactly 64 lowercase hex characters")
@@ -400,29 +411,30 @@ def _check_file_sha256(spec: dict) -> bool:
         return False
 
 
-def _git(args: list) -> str | None:
+def _git(args: list, repo_root: "Path | None" = None) -> str | None:
+    root = repo_root if repo_root is not None else REPO_ROOT
     try:
         result = subprocess.run(
-            [_GIT_BIN, *args], cwd=REPO_ROOT, capture_output=True, text=True, timeout=10,
+            [_GIT_BIN, *args], cwd=root, capture_output=True, text=True, timeout=10,
         )
     except Exception:
         return None
     return result.stdout.strip()[:MAX_CHECK_FIELD_LEN] if result.returncode == 0 else None
 
 
-def _check_git_branch(spec: dict) -> bool:
+def _check_git_branch(spec: dict, repo_root: "Path | None" = None) -> bool:
     expect = spec.get("expect", "")
     if not expect or len(expect) > MAX_CHECK_FIELD_LEN:
         raise PinError("git_branch check requires a short, non-empty 'expect'")
-    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"])
+    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], repo_root)
     return branch is not None and branch == expect
 
 
-def _check_git_head_prefix(spec: dict) -> bool:
+def _check_git_head_prefix(spec: dict, repo_root: "Path | None" = None) -> bool:
     prefix = spec.get("expect_prefix", "")
     if not prefix or len(prefix) > 64:  # a full sha256/sha1 hex digest is at most 64 chars
         raise PinError("git_head_prefix check requires a short, non-empty 'expect_prefix'")
-    head = _git(["rev-parse", "HEAD"])
+    head = _git(["rev-parse", "HEAD"], repo_root)
     return bool(head and head.startswith(prefix))
 
 
@@ -437,8 +449,10 @@ _CHECKERS = {
 }
 
 
-def run_check(check: dict) -> bool:
-    """Evaluate a checkable pin's `check` clause. Never raises for a normal check-failed result
+def run_check(check: dict, repo_root: "Path | None" = None) -> bool:
+    """Evaluate a checkable pin's `check` clause against `repo_root` (defaults to the module-level
+    REPO_ROOT, i.e. the CLI's own cwd at import time -- hook callers pass the payload's `cwd`
+    explicitly instead, see hooks/pin_deliver.py). Never raises for a normal check-failed result
     -- only for a malformed spec (bad type, missing arg, path escape). Fail-closed: any exception
     is a caller error the pin() call should have rejected, and a run_check() call from a hook must
     treat it as `False` upstream (defensive fail-safe), not let it propagate and wedge the hook.
@@ -446,10 +460,10 @@ def run_check(check: dict) -> bool:
     checker = _CHECKERS.get(check.get("type", ""))
     if checker is None:
         raise PinError(f"unknown check type: {check.get('type')!r} (allowed: {sorted(_CHECKERS)})")
-    return bool(checker(check))
+    return bool(checker(check, repo_root))
 
 
-def validate_check(check: dict) -> None:
+def validate_check(check: dict, repo_root: "Path | None" = None) -> None:
     """Raise PinError on a malformed OR oversized check at pin()-time, so a bad check is caught
     at write, not discovered as a crash (or a resource-exhaustion vector, Grok H2) inside a hook
     later. Per-field caps live in each _check_* function; this is the blanket size backstop that
@@ -459,7 +473,7 @@ def validate_check(check: dict) -> None:
     size = len(json.dumps(check, ensure_ascii=True).encode("utf-8"))
     if size > MAX_CHECK_JSON_BYTES:
         raise PinError(f"check is {size} bytes, limit {MAX_CHECK_JSON_BYTES}")
-    run_check(check)
+    run_check(check, repo_root)
 
 
 # --------------------------------------------------------------------------------- CRUD
@@ -480,7 +494,11 @@ def _reject_dangerous_text(text: str, field: str) -> None:
                             f"banner markers -- refusing to let a pin forge its own delivery UI")
 
 
-def pin(session_id: str, key: str, kind: str, value: str, check: dict | None = None) -> dict:
+def pin(session_id: str, key: str, kind: str, value: str, check: dict | None = None,
+        repo_root: "Path | None" = None) -> dict:
+    """`repo_root` overrides REPO_ROOT for validating `check` at write time (see
+    _detect_repo_root() and _check_path_relative()'s docstrings) -- the CLI leaves it unset
+    (module-level REPO_ROOT, derived from its own cwd, is already correct there)."""
     if kind not in ("checkable", "uncheckable"):
         raise PinError(f"kind must be 'checkable' or 'uncheckable', got {kind!r}")
     if kind == "checkable" and not check:
@@ -489,7 +507,7 @@ def pin(session_id: str, key: str, kind: str, value: str, check: dict | None = N
     if kind == "uncheckable" and check:
         raise PinError("uncheckable pins must not carry a check")
     if check:
-        validate_check(check)  # raises PinError on a malformed/unknown/oversized check
+        validate_check(check, repo_root)  # raises PinError on a malformed/unknown/oversized check
 
     raw_key = (key or "").strip()
     _reject_dangerous_text(raw_key, "key")
@@ -602,8 +620,13 @@ def precompact_pass(session_id: str) -> dict:
 
 # --------------------------------------------------------------------------- delivery pass
 
-def deliver_pass(session_id: str) -> tuple:
+def deliver_pass(session_id: str, repo_root: "Path | None" = None) -> tuple:
     """Verify, apply one-shot-then-evict rules, apply budget, persist, and render.
+
+    `repo_root` overrides REPO_ROOT for every checkable pin's re-verification (see
+    _detect_repo_root()'s docstring). The hooks pass their invocation's own `cwd` here; the CLI's
+    `deliver` subcommand leaves it unset, which is correct since module-level REPO_ROOT already
+    reflects the CLI's own cwd.
 
     Returns (rendered_text, info_dict). rendered_text is "" when there is nothing to deliver --
     callers must treat that as "say nothing", not as an error.
@@ -631,7 +654,7 @@ def deliver_pass(session_id: str) -> tuple:
                 check = rec.get("check") or {}
                 ctype = check.get("type", "?")
                 try:
-                    ok = run_check(check)
+                    ok = run_check(check, repo_root)
                 except PinError:
                     ok = False  # a malformed stored check is itself a failure signal, not a crash
                 if ok:
@@ -677,10 +700,12 @@ def deliver_pass(session_id: str) -> tuple:
     return text, {"pins": len(lines), "checkFailedEvicted": to_delete, "budgetEvicted": evicted_budget}
 
 
-def deliver_if_new_generation(session_id: str) -> tuple:
+def deliver_if_new_generation(session_id: str, repo_root: "Path | None" = None) -> tuple:
     """The gated entry point both hook events use (see the generation note above _meta_path).
     Cheapest-possible early-out: a session that never pinned anything, or has already been
     delivered for the current generation, costs one small JSON read and nothing else.
+
+    `repo_root` is forwarded to deliver_pass() -- see its docstring and _detect_repo_root()'s.
 
     Locks around the whole check-then-deliver-then-catch-up sequence, not just the final save --
     otherwise two concurrent hook firings could both pass the `delivered >= generation` check
@@ -697,7 +722,7 @@ def deliver_if_new_generation(session_id: str) -> tuple:
         if delivered >= generation:
             return "", {"skipped": "already delivered for this generation", "generation": generation}
 
-        text, info = deliver_pass(session_id)
+        text, info = deliver_pass(session_id, repo_root)
         meta["deliveredGeneration"] = generation
         _save_meta(session_id, meta)
     return text, info

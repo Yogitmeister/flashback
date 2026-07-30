@@ -20,6 +20,12 @@ Delivery is gated by pins.deliver_if_new_generation() -- see its docstring and D
 4.6. This is what keeps the PostToolUse hot path cheap and non-spammy: a session with no pins, or
 one that has already been delivered for the current compaction generation, costs one small JSON
 read and exits.
+
+Resolves the target project from the hook payload's own `cwd` field (2026-07-30 portability fix,
+DESIGN.md), not from wherever this tool itself is installed -- reads `payload.get("cwd")`
+explicitly rather than trusting this subprocess's inherited working directory, matching
+session_bus_drain.py's own established pattern for the same reason: inherited cwd is not
+guaranteed to match the session's actual project directory, but the payload field is.
 """
 
 from __future__ import annotations
@@ -32,7 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 try:
-    from pins import deliver_if_new_generation
+    from pins import deliver_if_new_generation, _detect_repo_root
 except Exception:
     sys.exit(0)  # fail-open
 
@@ -52,8 +58,10 @@ def main() -> int:
     if not sid:
         return 0
 
+    repo_root = _detect_repo_root(payload.get("cwd") or None)
+
     try:
-        text, _info = deliver_if_new_generation(sid)
+        text, _info = deliver_if_new_generation(sid, repo_root)
     except Exception:
         return 0  # a pins bug must never block a real tool call or session start
 

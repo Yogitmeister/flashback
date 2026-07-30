@@ -177,6 +177,75 @@ def test_git_branch_check_against_real_repo():
     assert P.run_check({"type": "git_branch", "expect": "definitely-not-a-real-branch-xyz"}) is False
 
 
+# --------------------------------------------------------------- portability (2026-07-30 refactor)
+#
+# Proves checks resolve against the INVOKING project (repo_root override), not wherever pins.py
+# itself is installed -- the actual fix, not just that the module-level default still works.
+
+def _make_git_repo(path, branch_name):
+    path.mkdir(parents=True, exist_ok=True)
+    run = lambda *args: subprocess.run(["git", *args], cwd=path, capture_output=True, text=True)
+    run("init", "-q", "-b", branch_name)
+    run("config", "user.email", "test@example.com")
+    run("config", "user.name", "test")
+    (path / "marker.txt").write_text("hello")
+    run("add", "-A")
+    run("commit", "-q", "-m", "init")
+    return path
+
+
+def test_repo_root_override_resolves_against_a_different_project(tmp_path):
+    """Two independent fake repos with different branches -- the SAME check dict must resolve
+    differently depending purely on the repo_root override, proving it is not silently ignored."""
+    repo_a = _make_git_repo(tmp_path / "repo_a", "feature-a")
+    repo_b = _make_git_repo(tmp_path / "repo_b", "feature-b")
+
+    assert P.run_check({"type": "git_branch", "expect": "feature-a"}, repo_root=repo_a) is True
+    assert P.run_check({"type": "git_branch", "expect": "feature-a"}, repo_root=repo_b) is False
+    assert P.run_check({"type": "git_branch", "expect": "feature-b"}, repo_root=repo_b) is True
+
+    assert P.run_check({"type": "path_exists", "path": "marker.txt"}, repo_root=repo_a) is True
+    only_in_b = repo_b / "only_in_b.txt"
+    only_in_b.write_text("x")
+    assert P.run_check({"type": "path_exists", "path": "only_in_b.txt"}, repo_root=repo_a) is False
+    assert P.run_check({"type": "path_exists", "path": "only_in_b.txt"}, repo_root=repo_b) is True
+
+
+def test_pin_and_deliver_honor_repo_root_override(tmp_path):
+    """End-to-end: pin() validates the check against repo_root at write time, deliver_pass()
+    re-verifies against repo_root at delivery time -- both legs of the portability fix, not just
+    the low-level run_check()."""
+    repo_a = _make_git_repo(tmp_path / "repo_a", "main")
+
+    P.pin(SID, "branch", "checkable", "on main",
+          check={"type": "git_branch", "expect": "main"}, repo_root=repo_a)
+    text, _info = P.deliver_pass(SID, repo_root=repo_a)
+    assert "CHECK PASSED" in text and "branch" in text
+
+    # A DIFFERENT repo_root at delivery time, where "main" is not the checked-out branch, must
+    # cause the check to fail on re-verification -- proves delivery-time re-check is also wired.
+    repo_c = _make_git_repo(tmp_path / "repo_c", "not-main")
+    text2, info2 = P.deliver_pass(SID, repo_root=repo_c)
+    assert "CHECK FAILED" in text2
+    assert "branch" in info2["checkFailedEvicted"]
+
+
+def test_detect_repo_root_uses_start_param_not_file_location(tmp_path):
+    """_detect_repo_root(start=...) must walk up from `start`, never from pins.py's own install
+    location -- this is the literal mechanism the whole refactor relies on."""
+    nested = tmp_path / "some_project" / "deep" / "subdir"
+    _make_git_repo(tmp_path / "some_project", "trunk")
+    nested.mkdir(parents=True, exist_ok=True)
+    found = P._detect_repo_root(str(nested))
+    assert found == (tmp_path / "some_project").resolve()
+
+
+def test_detect_repo_root_falls_back_to_start_when_no_git(tmp_path):
+    lonely = tmp_path / "no_git_here"
+    lonely.mkdir()
+    assert P._detect_repo_root(str(lonely)) == lonely.resolve()
+
+
 # --------------------------------------------------------------------------------------- budget
 
 def test_budget_eviction_prefers_uncheckable_before_checkable(repo):
