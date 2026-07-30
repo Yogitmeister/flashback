@@ -5,7 +5,11 @@
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%20(draft)-orange" alt="license draft">
 </p>
 
-<h1 align="center">alzheimer <sub><sup>(working title, not final)</sup></sub></h1>
+<p align="center">
+  <img src="docs/cover.png" alt="Flashback" width="640">
+</p>
+
+<h1 align="center">flashback</h1>
 
 <p align="center">
   <strong>Facts an AI coding agent pins to disk so they survive context compaction,<br>
@@ -26,7 +30,7 @@ conversation gets summarized to free up context space. That summary is lossy by 
 generic pass over the whole transcript, and it doesn't know which handful of facts you actually
 need to survive verbatim.
 
-`alzheimer` lets the agent **pin** those facts to disk before that happens, and re-injects them
+`flashback` lets the agent **pin** those facts to disk before that happens, and re-injects them
 automatically afterward:
 
 - **`checkable`** pins carry a small, closed-vocabulary mechanical check (a git branch, a file
@@ -58,8 +62,8 @@ Code hook events:
 **Working, tested, security-reviewed, running in the originating workspace.** Not yet a
 drop-in tool for an arbitrary project:
 
-- [ ] **Name.** "alzheimer" is a working title. A disease name on a public tool invites criticism
-  unrelated to the engineering — needs one deliberate decision before this goes public.
+- [x] **Name.** Settled as "flashback" (2026-07-31), over the internal "Alzheimer" working name --
+  a disease name on a public tool invites criticism unrelated to the engineering.
 - [ ] **License.** Leaning [PolyForm Noncommercial 1.0.0](LICENSE) (same as this author's other
   public tool, `gossip`), not finalized.
 - [ ] **Standalone repo-root resolution.** `pins.py`'s checkable-fact vocabulary (`git_branch`,
@@ -73,13 +77,13 @@ drop-in tool for an arbitrary project:
 ## Install (current state — see the limitation above)
 
 ```bash
-git clone https://github.com/Yogitmeister/alzheimer
-cd alzheimer
+git clone https://github.com/Yogitmeister/flashback
+cd flashback
 python -m pytest tests/ -q                 # 74 pass, 1 skipped (symlink test needs elevation)
 ```
 
 Registering the hooks: `install.py` was written for — and only tested against — the case where
-this code lives *inside* the repo it's protecting (a `My Projects/alzheimer/` style subfolder).
+this code lives *inside* the repo it's protecting (a `My Projects/flashback/` style subfolder).
 It writes to that repo's own `.claude/settings.local.json`, matching Claude Code's own hook-config
 schema, and never touches the git-tracked `.claude/settings.json`. Until the repo-root fix above
 lands, treat cross-repo use as unverified.
@@ -121,3 +125,5 @@ trust domain as the data it protects).
 Currently ships [PolyForm Noncommercial 1.0.0](LICENSE) as a placeholder, matching this author's
 other public repo — **not a final decision.** This repo is private; nothing here is granted to
 anyone yet.
+
+<p align="center"><img src="docs/flashback-badge.png" alt="Flashback" width="220"></p>

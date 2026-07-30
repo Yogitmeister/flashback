@@ -1,4 +1,4 @@
-"""Alzheimer pins -- agent-curated, session-scoped, mechanically-reverified pristine state.
+"""Flashback pins -- agent-curated, session-scoped, mechanically-reverified pristine state.
 
 See DESIGN.md for the full design and the three independent adversarial reviews that shaped it.
 
@@ -78,7 +78,7 @@ def _detect_repo_root(start: "str | Path | None" = None) -> Path:
 
 
 REPO_ROOT = _detect_repo_root()
-STATE_ROOT = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude")) / "alzheimer" / "pins"
+STATE_ROOT = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude")) / "flashback" / "pins"
 _GIT_BIN = shutil.which("git") or "git"  # resolved once: closes a PATH-order hijack (bandit B607)
 
 PIN_BUDGET = 3000       # total bytes of pin VALUES a session may hold at once
@@ -745,7 +745,7 @@ def _self_session_id() -> str | None:
 def _cli() -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Alzheimer pins -- pristine session state")
+    parser = argparse.ArgumentParser(description="Flashback pins -- pristine session state")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("pin", help="mark state pristine")

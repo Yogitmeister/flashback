@@ -2,7 +2,7 @@
 
 ## Threat model
 
-`alzheimer` is a **machine-local** mechanism: an agent process writes small facts to disk and a
+`flashback` is a **machine-local** mechanism: an agent process writes small facts to disk and a
 hook re-delivers them into its own future context, all running as the **same OS user**. That
 framing decides most of what follows: any process with that level of local access already has
 more direct ways to cause damage than forging a pin. The interesting attack is not "steal a key"

@@ -4,9 +4,9 @@
 NOT registered in .claude/settings.json (see DESIGN.md section 3.4). Invoke manually to test:
 
     echo '{"hook_event_name":"SessionStart","session_id":"<sid>"}' | \
-        python "My Projects/Alzheimer/hooks/pin_deliver.py"
+        python "My Projects/Flashback/hooks/pin_deliver.py"
     echo '{"hook_event_name":"PostToolUse","session_id":"<sid>"}' | \
-        python "My Projects/Alzheimer/hooks/pin_deliver.py"
+        python "My Projects/Flashback/hooks/pin_deliver.py"
 
 Separate file from .claude/hooks/session_bus_drain.py on purpose -- that hook is owned by another
 live session (see BRIEF.md) and delivers peer/self bus correspondence, an unrelated concern. Both

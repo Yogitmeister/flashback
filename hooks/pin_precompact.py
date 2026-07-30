@@ -6,7 +6,7 @@ deliberate remaining step, not something this pass does silently to a shared, li
 session config file. Invoke manually to test:
 
     echo '{"hook_event_name":"PreCompact","session_id":"<sid>","trigger":"manual"}' | \
-        python "My Projects/Alzheimer/hooks/pin_precompact.py"
+        python "My Projects/Flashback/hooks/pin_precompact.py"
 
 Separate file from .claude/hooks/session_continuity.py on purpose -- that hook is owned by
 another live session (see BRIEF.md) and does something different (transcript-tail extraction +

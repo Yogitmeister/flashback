@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Alzheimer pins -- installer.
+"""Flashback pins -- installer.
 
 Registers (or removes) hooks/pin_precompact.py and hooks/pin_deliver.py in this repo's
 .claude/settings.local.json -- the gitignored, per-machine hook config every session in THIS repo
@@ -26,7 +26,7 @@ Usage:
     python install.py             install (idempotent)
     python install.py --dry-run   show what would change, write nothing
     python install.py --verify    exit 0 if fully installed, 1 otherwise, prints status
-    python install.py --uninstall remove Alzheimer's entries, leave everything else untouched
+    python install.py --uninstall remove Flashback's entries, leave everything else untouched
 """
 
 from __future__ import annotations
@@ -40,14 +40,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pins import _detect_repo_root  # noqa: E402
 
-ALZHEIMER_DIR = Path(__file__).resolve().parent
+FLASHBACK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = _detect_repo_root()
 SETTINGS_PATH = REPO_ROOT / ".claude" / "settings.local.json"
 
 HOOK_SPECS = [
-    ("PreCompact", ALZHEIMER_DIR / "hooks" / "pin_precompact.py", 15),
-    ("SessionStart", ALZHEIMER_DIR / "hooks" / "pin_deliver.py", None),
-    ("PostToolUse", ALZHEIMER_DIR / "hooks" / "pin_deliver.py", None),
+    ("PreCompact", FLASHBACK_DIR / "hooks" / "pin_precompact.py", 15),
+    ("SessionStart", FLASHBACK_DIR / "hooks" / "pin_deliver.py", None),
+    ("PostToolUse", FLASHBACK_DIR / "hooks" / "pin_deliver.py", None),
 ]
 
 

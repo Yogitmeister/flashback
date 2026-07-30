@@ -1,9 +1,9 @@
-# Alzheimer -- design v1
+# Flashback -- design v1
 
 **Status:** design settled 2026-07-30, after independent adversarial review from DeepSeek, Qwen
 (Nous), and Grok, plus a security pass this session did on top of all three. Supersedes the
-"pristine KV pin store" framing in `BRIEF.md` with a narrower, evidence-based scope. Working name
-still unsettled (see `BRIEF.md`); this doc calls it "pins" throughout.
+"pristine KV pin store" framing in `BRIEF.md` with a narrower, evidence-based scope. The name is
+now settled as "Flashback" (see `README.md`); this doc calls it "pins" throughout.
 
 Raw reviews: `reviews/deepseek_review.md` (recovered from
 `tools/factory/runs/20260730-181240-.../agent_output.md` -- its own `--raw-output-file` write
@@ -95,9 +95,9 @@ This design does **not** implement a `shell` check type. See section 4.
 
 ### 4.1 Storage
 
-`~/.claude/alzheimer/pins/<session_id>.json` -- outside the git-tracked repo, matching
+`~/.claude/flashback/pins/<session_id>.json` -- outside the git-tracked repo, matching
 `tools/session_bus`'s convention of keeping ephemeral per-session runtime state (`~/.claude/`) 
-separate from checked-in code. Nothing under `My Projects/Alzheimer/` is live session state.
+separate from checked-in code. Nothing under `My Projects/Flashback/` is live session state.
 
 ### 4.2 Pin shape
 
@@ -105,8 +105,8 @@ separate from checked-in code. Nothing under `My Projects/Alzheimer/` is live se
 {
   "key": "current_branch",
   "kind": "checkable",
-  "value": "wip/alzheimer-design",
-  "check": {"type": "git_branch", "expect": "wip/alzheimer-design"},
+  "value": "wip/flashback-design",
+  "check": {"type": "git_branch", "expect": "wip/flashback-design"},
   "atMs": 1785387000000,
   "updates": 1,
   "compactionsSurvived": 0,
@@ -322,7 +322,7 @@ in the same runs (qwen's own security-review write DID fail separately too, but 
 transient HTTP 524 from the provider, not this bug -- see the security section above). All three
 scripts share `tools/agents/response_artifact.py`'s `write_raw_response_artifact()`. Not
 investigated further here (out of scope for this project, and `tools/` is owned by nobody in
-particular but this is a `tools/agents/` regression, not an `Alzheimer` one) -- both responses
+particular but this is a `tools/agents/` regression, not an `Flashback` one) -- both responses
 were fully recovered from `tools/factory/runs/<run_id>/agent_output.md`, which every dispatch call
 writes unconditionally, and saved to `reviews/deepseek_review.md` /
 `reviews/security/deepseek_security.md` by hand so nothing was lost. Worth a one-line bug report
