@@ -1,7 +1,7 @@
-"""Tests for My Projects/Flashback/install.py -- run against a throwaway settings file, never
+"""Tests for install.py -- run against a throwaway settings file, never
 the real .claude/settings.local.json.
 
-Run: python -m pytest "My Projects/Flashback/tests/test_install.py" -q
+Run: python -m pytest "tests/test_install.py" -q
 """
 
 from __future__ import annotations

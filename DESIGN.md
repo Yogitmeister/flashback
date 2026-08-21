@@ -99,7 +99,7 @@ This design does **not** implement a `shell` check type. See section 4.
 
 `~/.claude/flashback/pins/<session_id>.json` -- outside the git-tracked repo, matching
 `tools/session_bus`'s convention of keeping ephemeral per-session runtime state (`~/.claude/`) 
-separate from checked-in code. Nothing under `My Projects/Flashback/` is live session state.
+separate from checked-in code. Nothing under `` is live session state.
 
 ### 4.2 Pin shape
 

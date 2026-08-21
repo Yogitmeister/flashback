@@ -14,7 +14,7 @@ separate concerns: relevance, truth freshness, and lifecycle timing.
 ## Validate
 
 ```bash
-python -m pytest "My Projects/Flashback/tests/" -q
+python -m pytest "tests/" -q
 ```
 
 Security-sensitive changes to storage, containment, locking, verification, rendering, or hook

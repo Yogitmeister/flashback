@@ -1,6 +1,6 @@
-"""Tests for My Projects/Flashback/pins.py.
+"""Tests for pins.py.
 
-Run: python -m pytest "My Projects/Flashback/tests/test_pins.py" -q
+Run: python -m pytest "tests/test_pins.py" -q
 
 Every test isolates STATE_ROOT (and, where relevant, REPO_ROOT) to a pytest tmp_path so nothing
 here ever touches a real session's ~/.claude/flashback/pins/ state.
